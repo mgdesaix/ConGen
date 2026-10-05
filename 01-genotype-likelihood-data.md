@@ -1,7 +1,7 @@
 Genotype likelihood data
 ================
 Matt DeSaix
-2024-08-21
+2026-10-05
 
 One aspect that is different when working with low-coverage data is the
 file types of the variant information. Typically you don’t work with the
