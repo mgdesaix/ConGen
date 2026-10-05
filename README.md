@@ -1,6 +1,6 @@
-# ConGen-2024: Population assignment with genotype likelihoods 
+# ConGen: Population assignment with genotype likelihoods 
 
-This is a walk-through of performing population assignment with genotype likelihoods from low-coverage whole genome sequencing (lcWGS) using the software [WGSassign](https://github.com/mgdesaix/wgsassign). The materials here correspond to the activities in my hands-on session at [ConGen 2024](https://www.umt.edu/ces/conferences/congen/), and ideally will doubly serve as an augmented vignette of the instructions for WGSassign. 
+This is a walk-through of performing population assignment with genotype likelihoods from low-coverage whole genome sequencing (lcWGS) using the software [WGSassign](https://github.com/mgdesaix/wgsassign). The materials here correspond to the activities in the population assignment hands-on session at [ConGen](https://www.umt.edu/ces/conferences/congen/), and ideally will doubly serve as an augmented vignette of the instructions for WGSassign. 
 
 ## Pre-reqs
 
