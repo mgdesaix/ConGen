@@ -31,6 +31,9 @@ options below to calculate reference allele frequencies
 (`--get_reference_af`), calculate effective sample sizes (`--ne_obs`),
 and perform leave-one-out cross-validation (`--loo`):
 
+*Note: to run bash code in RStudio, copy/paste in your “Terminal”
+instead of “Console”*
+
 ``` sh
 conda activate WGSassign
 # change file paths as needed
@@ -80,13 +83,13 @@ assignment (`*.pop_like_LOO.txt`):
 ``` r
 library(tidyverse)
 # read in initial IDs file for individuals
-western.ids <- read_table2("./data/western/amre.western.wgsassign.ids.txt",
+western.ids <- read_table("./data/western/amre.western.wgsassign.ids.txt",
                           col_names = c("Sample", "Breeding_pop"))
 # read in wgsassign output
 # population names
 western.pops <- readLines("./out/western/amre.western.reference.pop_names.txt")
 # LOO assignment log likelihoods
-western.loo <- cbind(western.ids, read_table2("./out/western/amre.western.reference.pop_like_LOO.txt",
+western.loo <- cbind(western.ids, read_table("./out/western/amre.western.reference.pop_like_LOO.txt",
                           col_names = western.pops))
 ```
 
@@ -170,7 +173,7 @@ Let’s take a look at the effective sample sizes of these populations
 ### Evaluating effective sample size
 
 ``` r
-western.ess <- read_table2("./out/western/amre.western.reference.ne_obs.txt")
+western.ess <- read_table("./out/western/amre.western.reference.ne_obs.txt")
 ```
 
 ``` r
@@ -191,7 +194,7 @@ this individual-level effective sample size is also output by
 
 ``` r
 western.ess.ind <- western.ids %>% 
-  cbind(read_table2("./out/western/amre.western.reference.ne_ind.txt",
+  cbind(read_table("./out/western/amre.western.reference.ne_ind.txt",
                     col_names = "ess"))
 ```
 
@@ -377,7 +380,7 @@ accuracy looks like. I use the same R code as above, just pipe a little
 more of it together:
 
 ``` r
-western.assign <- cbind(western.ids, read_table2("./out/western/amre.western.assign.pop_like.txt",
+western.assign <- cbind(western.ids, read_table("./out/western/amre.western.assign.pop_like.txt",
                           col_names = western.pops))
 ```
 
@@ -426,43 +429,13 @@ leave-one-out cross-validation for determining our assignment accuracy!
 But, the standard assignment is precisely what we can use for any
 individuals that are *not* part of the reference allele frequencies.
 
-## Break-out session (20 min.)
+## Break-out session
+
+### Data
 
 For the first break-out session we’ll put together all of these topics
 to assess assignment accuracy with the American Redstarts of the West
-data set. In groups, you will
-
-1.  select individuals from the Basin Rockies and Western Boreal
-    populations that will result balanced effective sample sizes between
-    the two populations, we’ll call these the “LOO reference”
-    individuals
-
-2.  Write a new `*.wgsassign.ids.txt` file for these individuals and use
-    the `subset-beagle-ind.sh` script to create a new Beagle file of
-    your “LOO reference” individuals.
-
-3.  Perform LOO assignment in WGSassign on the new “LOO reference”
-    Beagle file and calculate the effective sample sizes
-
-4.  Write another `*.wgsassign.ids.txt` file for all the individuals
-    *not* part of the “LOO reference” group, we’ll call these
-    individuals the “Test” group. Create a new Beagle file for the
-    “Test” group.
-
-5.  Perform standard assignment in WGSassign on the “Test” group, using
-    the `LOO reference` population allele frequencies.
-
-6.  Summarize the assignment accuracy of the LOO reference and test
-    individuals in R; report the effective sample sizes of the two
-    populations; and provide an explanation of how you chose individuals
-    to remove in order to balance the effective sample sizes.
-
-7.  Bonus: If you finish early, play around with the data. How small of
-    balanced effective sample sizes can you have in the reference
-    population to still get accurate assignment? If you cut the Beagle
-    file to 10k SNPs do you still get accurate assignment?
-
-The files you’ll need for this are:
+data set. The files you’ll need for this are:
 
 - `./data/western/amre.western.beagle.gz`
 - `./data/western/amre.western.wgsassign.ids.txt`
@@ -476,19 +449,256 @@ The purpose of this file is that the samples we have in our small data
 set are from multiple sampling sites within the populations - when
 balancing out the reference populations it may be best to select
 individuals from the different sampling sites. It’s a CSV file with a
-header so can be read in to R with `read_csv`. The meta data file also
-contains individuals that are not part of our Western group subset, so
-I’d read it in and use a join with the Western IDs file we were using in
-R:
+header so can be read in to R with `read_csv`.
 
-``` r
-full.meta <- read_csv("./data/full.amre.beagle.meta.csv")
+### Activity
 
-western.ids.meta <- western.ids %>%
-  left_join(full.meta, by = "Sample")
+In groups, you will work through the following objectives. Template code
+is provided but feel free to modify as there are multiple ways to
+address these questions.
+
+**1.** Select individuals from the Basin Rockies and Western Boreal
+populations that will result balanced effective sample sizes between the
+two populations, we’ll call these the “LOO reference” individuals. Write
+a new `*.wgsassign.ids.txt` file for these individuals and use the
+`subset-beagle-ind.sh` script to create a new Beagle file of your “LOO
+reference” individuals.
+
+------------------------------------------------------------------------
+
+*Example code*
+
+I’ll make a new out directory to store the results of this assignment.
+
+``` sh
+mkdir -p ./out/activity1
 ```
 
-We’ll reconvene shortly and discuss these results as a group!
+Create a file to subset samples and check if the effective sample size
+is balanced
+
+``` r
+library(tidyverse)
+western.ids <- read_table("./data/western/amre.western.wgsassign.ids.txt",
+                          col_names = c("Sample", "Breeding_pop"))
+full.meta <- read_csv("./data/full.amre.beagle.meta.csv")
+western.ess.ind <- western.ids %>% 
+  cbind(read_table("./out/western/amre.western.reference.ne_ind.txt",
+                    col_names = "ess"))
+
+western.ids.meta <- western.ids %>%
+  left_join(full.meta, by = c("Sample", "Breeding_pop")) %>%
+  left_join(western.ess.ind, by = c("Sample", "Breeding_pop"))
+
+western.ids.meta
+```
+
+I’ll randomly subset 20 samples from each breeding population, ideally
+that will split samples up evenly within sampling site
+
+``` r
+set.seed(13984891)
+balanced.ref.pop.n <- western.ids.meta %>%
+  group_by(Breeding_pop) %>%
+  slice_sample(n = 20)
+```
+
+``` r
+balanced.ref.pop.n %>%
+  group_by(Breeding_pop) %>%
+  summarize(Sum_ess = sum(ess),
+            N_samples = n())
+```
+
+That balanced out the number of samples, but the effective sample size
+is imbalanced with the BR pop being higher. I’ll remove several
+individuals from that population
+
+``` r
+balanced.ref.pop.n.ess <- balanced.ref.pop.n %>%
+  filter(!Sample %in% c("Ind305", "Ind296", "Ind307"))
+
+balanced.ref.pop.n.ess %>%
+  group_by(Breeding_pop) %>%
+  summarize(Sum_ess = sum(ess),
+            N_samples = n())
+```
+
+Now the effective samples sizes are roughly equal and I’ll save this set
+of samples to be run in WGSassign.
+
+``` r
+balanced.ref.pop.n.ess %>%
+  select(Sample, Breeding_pop) %>%
+  write_delim("./out/activity1/reference.wgsassign.ids.txt", delim = "\t", col_names = FALSE)
+```
+
+We’ll use the above file to subset the Beagle genotype likelihoods to
+create a new reference population to use for the next section:
+
+``` sh
+individuals=./out/activity1/reference.wgsassign.ids.txt
+beagle=./data/western/amre.western.beagle.gz
+outname=./out/activity1/reference.beagle.gz
+
+./data/scripts/subset-beagle-ind.sh -i <(cut -f1 ${individuals}) -b ${beagle} -o ${outname}
+```
+
+------------------------------------------------------------------------
+
+**2.** Perform LOO assignment in WGSassign on the new “LOO reference”
+Beagle file and calculate the effective sample sizes
+
+------------------------------------------------------------------------
+
+*Example code*
+
+``` sh
+conda activate WGSassign
+# change file paths as needed
+beagle=./out/activity1/reference.beagle.gz
+popIDs=./out/activity1/reference.wgsassign.ids.txt
+out=./out/activity1/reference
+
+WGSassign --beagle ${beagle} --pop_af_IDs ${popIDs} --get_reference_af --ne_obs --loo --out ${out}
+```
+
+Let’s look at the effective sample sizes of the 2 populations:
+
+``` r
+reference.pop.ess <- read_table("./out/activity1/reference.ne_obs.txt",
+                                show_col_types = FALSE)
+reference.pop.ess
+```
+
+The BR population effective sample size is different than what I had
+calculated previously. That is because the value, when calculated for
+each individual at each loci, is affected by the population allele
+frequency. Since we changed the number of individuals, we changed the
+allele frequency and this resulted in a decreased population effective
+sample size for BR, while WB is basically the same because I didn’t
+remove any of those individuals.
+
+So, maybe add another BR individual back in to the reference population
+that you had removed from the previous step, re-run WGSassign and look
+again at the reference effective sample sizes to see if they are more
+balanced.
+
+------------------------------------------------------------------------
+
+**3.** Write another `*.wgsassign.ids.txt` file for all the individuals
+*not* part of the “LOO reference” group, we’ll call these individuals
+the “Test” group. Create a new Beagle file for the “Test” group.
+
+------------------------------------------------------------------------
+
+*Example code*
+
+``` r
+test.wgsassign.ids <- western.ids %>%
+  filter(!Sample %in% pull(balanced.ref.pop.n.ess, Sample))
+test.wgsassign.ids
+```
+
+``` r
+test.wgsassign.ids %>%
+  write_delim("./out/activity1/test.wgsassign.ids.txt", delim = "\t", col_names = FALSE)
+```
+
+``` sh
+individuals=./out/activity1/test.wgsassign.ids.txt
+beagle=./data/western/amre.western.beagle.gz
+outname=./out/activity1/test.beagle.gz
+
+./data/scripts/subset-beagle-ind.sh -i <(cut -f1 ${individuals}) -b ${beagle} -o ${outname}
+```
+
+------------------------------------------------------------------------
+
+**4.** Perform standard assignment in WGSassign on the “Test” group,
+using the `LOO reference` population allele frequencies.
+
+------------------------------------------------------------------------
+
+*Example code*
+
+``` sh
+# change file paths as needed
+beagle=./out/activity1/test.beagle.gz
+af=./out/activity1/reference.pop_af.npy
+out=./out/activity1/test.assign
+
+WGSassign --beagle ${beagle} --pop_af_file ${af} --get_pop_like --out ${out}
+```
+
+------------------------------------------------------------------------
+
+**5.** Summarize the assignment accuracy of the LOO reference and test
+individuals in R; report the effective sample sizes of the two
+populations; and provide an explanation of how you chose individuals to
+remove in order to balance the effective sample sizes.
+
+------------------------------------------------------------------------
+
+*Example code*
+
+``` r
+reference.loo <- read_table("./out/activity1/reference.pop_like_LOO.tsv",
+                            show_col_types = FALSE) %>%
+  add_column("Group" = "reference")
+reference.loo
+```
+
+``` r
+test.ids <- read_table("./out/activity1/test.wgsassign.ids.txt",
+                       col_names = c("sample", "source_pop"),
+                       show_col_types = FALSE)
+pop.ids <- readLines("./out/activity1/reference.pop_names.txt")
+test.pop_like <- test.ids %>%
+  cbind(read_table("./out/activity1/test.assign.pop_like.txt",
+                            col_names = pop.ids,
+                            show_col_types = FALSE)) %>%
+  add_column("Group" = "test")
+test.pop_like
+```
+
+``` r
+combined.loo.probs <- reference.loo %>%
+  rbind(test.pop_like) %>%
+  pivot_longer(cols = BR:WB, # pivot by the assigned populations
+               names_to = "AssignedPop",
+               values_to = "AssignedLike") %>%
+  group_by(Group, sample, source_pop) %>%
+  mutate(AssignedProb = round(exp(AssignedLike - max(AssignedLike)) / sum(exp(AssignedLike - max(AssignedLike))),2 )) # summarize posterior probabilities, grouped by individual
+
+combined.loo.probs
+```
+
+``` r
+combined.loo.summary <- combined.loo.probs %>%
+  filter(AssignedLike == max(AssignedLike)) %>% # keep only the maximum likelihood
+  mutate(Correct = ifelse(source_pop == AssignedPop, 1, 0)) 
+
+combined.loo.summary %>% # create binary column of correct assignment
+  group_by(Group, source_pop) %>%
+  summarize(Accuracy = sum(Correct)/n(),
+            N_samples = n(),
+            .groups = "drop") # summarize accuracy by population
+```
+
+Which samples are incorrectly assigned?
+
+``` r
+combined.loo.summary %>%
+  filter(Correct == 0)
+```
+
+------------------------------------------------------------------------
+
+**6.** Bonus: If you finish early, play around with the data. How small
+of balanced effective sample sizes can you have in the reference
+population to still get accurate assignment? If you cut the Beagle file
+to 10k SNPs do you still get accurate assignment?
 
 ------------------------------------------------------------------------
 

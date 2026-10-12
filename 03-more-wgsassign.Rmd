@@ -69,7 +69,7 @@ library(tidyverse)
 k_partitions <- 5
 
 # same IDs for each 
-eastern.ids <- read_table2("./data/eastern/amre.eastern.wgsassign.ids.txt",
+eastern.ids <- read_table("./data/eastern/amre.eastern.wgsassign.ids.txt",
                           col_names = c("Sample", "Breeding_pop"))
 loo.list <- list()
 for(i in 1:k_partitions){
@@ -79,7 +79,7 @@ for(i in 1:k_partitions){
   
   pop_names <- readLines(pop_names_file) # pop names should all be in the same order but just to be careful we'll read them in each time
   loo.list[[i]] <- eastern.ids %>%
-    cbind(read_table2(file = loo_file,
+    cbind(read_table(file = loo_file,
                                col_names = pop_names)) %>%
     add_column("Partition" = i) # add partition signifier
 }
