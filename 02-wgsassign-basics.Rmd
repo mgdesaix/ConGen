@@ -50,19 +50,13 @@ which outputs to screen:
 
 The output is verbose and provides some handy information - such as checking there's the expected number of sites and individuals in the file you provide. The `EM (MAF) converged at iteration` note comes up each time the population allele frequency (minor) is calculated. It occurs twice at the beginning (one for each pop) and also occurs during LOO as the allele frequency for a given population has to be recalculated without the individual that is being assigned...in our example, this occurred 47 times. This is the slowest step, but fortunately this is fast in `WGSassign` and can be sped up by increasing the number of threads used for parallelization (using the `--threads` argument). 
 
-Let's switch into R and look at the file with the log likelihoods of assignment (`*.pop_like_LOO.txt`):
+Let's switch into R and look at the file with the log likelihoods of assignment (`*.pop_like_LOO.tsv`):
 
 ```{r, message = FALSE, warning=FALSE}
 library(tidyverse)
-# read in initial IDs file for individuals
-western.ids <- read_table("./data/western/amre.western.wgsassign.ids.txt",
-                          col_names = c("Sample", "Breeding_pop"))
-# read in wgsassign output
-# population names
-western.pops <- readLines("./out/western/amre.western.reference.pop_names.txt")
 # LOO assignment log likelihoods
-western.loo <- cbind(western.ids, read_table("./out/western/amre.western.reference.pop_like_LOO.txt",
-                          col_names = western.pops))
+western.loo <- read_table("./out/western/amre.western.reference.pop_like_LOO.tsv",
+                          show_col_types = FALSE)
 ```
 
 ```r
@@ -73,8 +67,6 @@ head(western.loo)
 knitr::kable(head(western.loo))
 ```
 
-Note that the `*.pop_like_LOO.txt` does not have the sample names, but is in the same order as the initial file we provided to `WGSassign` so we `cbind()` em.
-
 We then want to convert the log likelihoods to posterior probabilities by exponentiating them and dividing by the sum. To deal with underflow issues of values getting too small for the computer when we exponentiate them, we'll also subtract the max value.
 
 Many ways to do this, but below I pivot the table so I can easily group by the Sample IDs:
@@ -84,7 +76,7 @@ western.loo.probs <- western.loo %>%
   pivot_longer(cols = BR:WB, # pivot by the assigned populations
                names_to = "AssignedPop",
                values_to = "AssignedLike") %>%
-  group_by(Sample) %>%
+  group_by(sample) %>%
   mutate(AssignedProb = round(exp(AssignedLike - max(AssignedLike)) / sum(exp(AssignedLike - max(AssignedLike))),2 )) # summarize posterior probabilities, grouped by individual
 ```
 
@@ -96,13 +88,13 @@ head(western.loo.probs)
 knitr::kable(head(western.loo.probs))
 ```
 
-Ideally, we'd capture some uncertainty in the assignments with the probabilities - but it is interesting to note that they are all 1 and 0, even when wrong! We'll get into this later. For now, we just want to filter out the population the individual is assigned to (`AssignedPop`) and determine the accuracy of assignment back to their known population (`Breeding_pop`).
+Ideally, we'd capture some uncertainty in the assignments with the probabilities - but it is interesting to note that they are all 1 and 0, even when wrong! We'll get into this later. For now, we just want to filter out the population the individual is assigned to (`AssignedPop`) and determine the accuracy of assignment back to their known population (`source_pop`).
 
 ```{r}
 western.loo.summary <- western.loo.probs %>%
   filter(AssignedLike == max(AssignedLike)) %>% # keep only the maximum likelihood
-  mutate(Correct = ifelse(Breeding_pop == AssignedPop, 1, 0)) %>% # create binary column of correct assignment
-  group_by(Breeding_pop) %>%
+  mutate(Correct = ifelse(source_pop == AssignedPop, 1, 0)) %>% # create binary column of correct assignment
+  group_by(source_pop) %>%
   summarize(Accuracy = sum(Correct)/n()) # summarize accuracy by population
 ```
 
@@ -135,6 +127,9 @@ knitr::kable(western.ess)
 Basin Rockies has a notably higher effective sample size than Western Boreal and this may be the root of the problem - unbalanced sequencing depths and number of individuals between our populations. What can we do about this? Well, the population effective sample is determined by the sum of each individual's effective sample size in that population, and this individual-level effective sample size is also output by `WGSassign`. Let's take a look in R:
 
 ```{r, warning = FALSE, message = FALSE}
+# read in initial IDs file for individuals
+western.ids <- read_table("./data/western/amre.western.wgsassign.ids.txt",
+                          col_names = c("sample", "source_pop"))
 western.ess.ind <- western.ids %>% 
   cbind(read_table("./out/western/amre.western.reference.ne_ind.txt",
                     col_names = "ess"))
@@ -152,7 +147,7 @@ Let's see if there's any variation in individual effective sample between the po
 
 ```{r}
 western.ess.ind.summary <- western.ess.ind %>%
-  group_by(Breeding_pop) %>%
+  group_by(source_pop) %>%
   summarize(N = n(),
             Mean_ess = mean(ess), # get mean effective sample size by group
             Max_ess = max(ess),
@@ -173,7 +168,7 @@ To do that, let's say we want to use 20 individuals per population. We can take 
 
 ```{r}
 balanced.western.ids <- western.ids %>%
-  group_by(Breeding_pop) %>%
+  group_by(source_pop) %>%
   slice_head(n = 20) # cut to 20 individuals per group
 ```
 
@@ -264,6 +259,9 @@ Let's load in the likelihoods of assignment and see what the assignment accuracy
 
 
 ```{r, message = FALSE, warning = FALSE}
+western.ids <- read_table("./data/western/amre.western.wgsassign.ids.txt",
+                          col_names = c("sample", "source_pop"))
+western.pops <- readLines("./out/western/amre.western.reference.pop_names.txt")
 western.assign <- cbind(western.ids, read_table("./out/western/amre.western.assign.pop_like.txt",
                           col_names = western.pops))
 ```
@@ -282,12 +280,12 @@ western.assign.summary <- western.assign %>%
   pivot_longer(cols = BR:WB,
                names_to = "AssignedPop",
                values_to = "AssignedLike") %>%
-  group_by(Sample) %>%
+  group_by(sample) %>%
   mutate(AssignedProb = round(exp(AssignedLike - max(AssignedLike)) / sum(exp(AssignedLike - max(AssignedLike))),2 )) %>%
   filter(AssignedLike == max(AssignedLike)) %>%
   ungroup() %>%
-  mutate(Correct = ifelse(Breeding_pop == AssignedPop, 1, 0)) %>%
-  group_by(Breeding_pop) %>%
+  mutate(Correct = ifelse(source_pop == AssignedPop, 1, 0)) %>%
+  group_by(source_pop) %>%
   summarize(Accuracy = sum(Correct)/n(),
             .groups = "drop")
 ```
@@ -337,15 +335,15 @@ Create a file to subset samples and check if the effective sample size is balanc
 ```{r, message=FALSE, warning=FALSE, eval = FALSE}
 library(tidyverse)
 western.ids <- read_table("./data/western/amre.western.wgsassign.ids.txt",
-                          col_names = c("Sample", "Breeding_pop"))
+                          col_names = c("sample", "source_pop"))
 full.meta <- read_csv("./data/full.amre.beagle.meta.csv")
 western.ess.ind <- western.ids %>% 
   cbind(read_table("./out/western/amre.western.reference.ne_ind.txt",
                     col_names = "ess"))
 
 western.ids.meta <- western.ids %>%
-  left_join(full.meta, by = c("Sample", "Breeding_pop")) %>%
-  left_join(western.ess.ind, by = c("Sample", "Breeding_pop"))
+  left_join(full.meta, by = c("sample", "source_pop")) %>%
+  left_join(western.ess.ind, by = c("sample", "source_pop"))
 
 western.ids.meta
 ```
@@ -355,13 +353,13 @@ I'll randomly subset 20 samples from each breeding population, ideally that will
 ```{r, eval = FALSE}
 set.seed(13984891)
 balanced.ref.pop.n <- western.ids.meta %>%
-  group_by(Breeding_pop) %>%
+  group_by(source_pop) %>%
   slice_sample(n = 20)
 ```
 
 ```{r, eval = FALSE}
 balanced.ref.pop.n %>%
-  group_by(Breeding_pop) %>%
+  group_by(source_pop) %>%
   summarize(Sum_ess = sum(ess),
             N_samples = n())
 ```
@@ -370,10 +368,10 @@ That balanced out the number of samples, but the effective sample size is imbala
 
 ```{r, eval = FALSE}
 balanced.ref.pop.n.ess <- balanced.ref.pop.n %>%
-  filter(!Sample %in% c("Ind305", "Ind296", "Ind307"))
+  filter(!sample %in% c("Ind305", "Ind296", "Ind307"))
 
 balanced.ref.pop.n.ess %>%
-  group_by(Breeding_pop) %>%
+  group_by(source_pop) %>%
   summarize(Sum_ess = sum(ess),
             N_samples = n())
 ```
@@ -382,7 +380,7 @@ Now the effective samples sizes are roughly equal and I'll save this set of samp
 
 ```{r, eval = FALSE}
 balanced.ref.pop.n.ess %>%
-  select(Sample, Breeding_pop) %>%
+  select(sample, source_pop) %>%
   write_delim("./out/activity1/reference.wgsassign.ids.txt", delim = "\t", col_names = FALSE)
 ```
 
@@ -434,7 +432,7 @@ So, maybe add another BR individual back in to the reference population that you
 
 ```{r, eval = FALSE}
 test.wgsassign.ids <- western.ids %>%
-  filter(!Sample %in% pull(balanced.ref.pop.n.ess, Sample))
+  filter(!sample %in% pull(balanced.ref.pop.n.ess, sample))
 test.wgsassign.ids
 ```
 
