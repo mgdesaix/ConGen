@@ -78,37 +78,27 @@ the number of threads used for parallelization (using the `--threads`
 argument).
 
 Let’s switch into R and look at the file with the log likelihoods of
-assignment (`*.pop_like_LOO.txt`):
+assignment (`*.pop_like_LOO.tsv`):
 
 ``` r
 library(tidyverse)
-# read in initial IDs file for individuals
-western.ids <- read_table("./data/western/amre.western.wgsassign.ids.txt",
-                          col_names = c("Sample", "Breeding_pop"))
-# read in wgsassign output
-# population names
-western.pops <- readLines("./out/western/amre.western.reference.pop_names.txt")
 # LOO assignment log likelihoods
-western.loo <- cbind(western.ids, read_table("./out/western/amre.western.reference.pop_like_LOO.txt",
-                          col_names = western.pops))
+western.loo <- read_table("./out/western/amre.western.reference.pop_like_LOO.tsv",
+                          show_col_types = FALSE)
 ```
 
 ``` r
 head(western.loo)
 ```
 
-| Sample | Breeding_pop |        BR |        WB |
-|:-------|:-------------|----------:|----------:|
-| Ind0   | WB           | -84764.77 | -84599.44 |
-| Ind1   | WB           | -82439.19 | -81845.05 |
-| Ind2   | WB           | -80902.37 | -80748.42 |
-| Ind3   | WB           | -79201.48 | -78675.23 |
-| Ind40  | BR           | -77307.96 | -79393.15 |
-| Ind41  | BR           | -78018.68 | -79657.28 |
-
-Note that the `*.pop_like_LOO.txt` does not have the sample names, but
-is in the same order as the initial file we provided to `WGSassign` so
-we `cbind()` em.
+| sample | source_pop |        BR |        WB |
+|:-------|:-----------|----------:|----------:|
+| Ind0   | WB         | -84764.77 | -84599.44 |
+| Ind1   | WB         | -82439.19 | -81845.05 |
+| Ind2   | WB         | -80902.37 | -80748.42 |
+| Ind3   | WB         | -79201.48 | -78675.23 |
+| Ind40  | BR         | -77307.96 | -79393.15 |
+| Ind41  | BR         | -78018.68 | -79657.28 |
 
 We then want to convert the log likelihoods to posterior probabilities
 by exponentiating them and dividing by the sum. To deal with underflow
@@ -123,7 +113,7 @@ western.loo.probs <- western.loo %>%
   pivot_longer(cols = BR:WB, # pivot by the assigned populations
                names_to = "AssignedPop",
                values_to = "AssignedLike") %>%
-  group_by(Sample) %>%
+  group_by(sample) %>%
   mutate(AssignedProb = round(exp(AssignedLike - max(AssignedLike)) / sum(exp(AssignedLike - max(AssignedLike))),2 )) # summarize posterior probabilities, grouped by individual
 ```
 
@@ -131,27 +121,27 @@ western.loo.probs <- western.loo %>%
 head(western.loo.probs)
 ```
 
-| Sample | Breeding_pop | AssignedPop | AssignedLike | AssignedProb |
-|:-------|:-------------|:------------|-------------:|-------------:|
-| Ind0   | WB           | BR          |    -84764.77 |            0 |
-| Ind0   | WB           | WB          |    -84599.44 |            1 |
-| Ind1   | WB           | BR          |    -82439.19 |            0 |
-| Ind1   | WB           | WB          |    -81845.05 |            1 |
-| Ind2   | WB           | BR          |    -80902.37 |            0 |
-| Ind2   | WB           | WB          |    -80748.42 |            1 |
+| sample | source_pop | AssignedPop | AssignedLike | AssignedProb |
+|:-------|:-----------|:------------|-------------:|-------------:|
+| Ind0   | WB         | BR          |    -84764.77 |            0 |
+| Ind0   | WB         | WB          |    -84599.44 |            1 |
+| Ind1   | WB         | BR          |    -82439.19 |            0 |
+| Ind1   | WB         | WB          |    -81845.05 |            1 |
+| Ind2   | WB         | BR          |    -80902.37 |            0 |
+| Ind2   | WB         | WB          |    -80748.42 |            1 |
 
 Ideally, we’d capture some uncertainty in the assignments with the
 probabilities - but it is interesting to note that they are all 1 and 0,
 even when wrong! We’ll get into this later. For now, we just want to
 filter out the population the individual is assigned to (`AssignedPop`)
 and determine the accuracy of assignment back to their known population
-(`Breeding_pop`).
+(`source_pop`).
 
 ``` r
 western.loo.summary <- western.loo.probs %>%
   filter(AssignedLike == max(AssignedLike)) %>% # keep only the maximum likelihood
-  mutate(Correct = ifelse(Breeding_pop == AssignedPop, 1, 0)) %>% # create binary column of correct assignment
-  group_by(Breeding_pop) %>%
+  mutate(Correct = ifelse(source_pop == AssignedPop, 1, 0)) %>% # create binary column of correct assignment
+  group_by(source_pop) %>%
   summarize(Accuracy = sum(Correct)/n()) # summarize accuracy by population
 ```
 
@@ -159,10 +149,10 @@ western.loo.summary <- western.loo.probs %>%
 western.loo.summary
 ```
 
-| Breeding_pop | Accuracy |
-|:-------------|---------:|
-| BR           |     1.00 |
-| WB           |     0.65 |
+| source_pop | Accuracy |
+|:-----------|---------:|
+| BR         |     1.00 |
+| WB         |     0.65 |
 
 Well, mixed success. All individuals from Basin Rockies are accurately
 assigned back to the population, but only 65% of Western Boreal
@@ -193,6 +183,9 @@ this individual-level effective sample size is also output by
 `WGSassign`. Let’s take a look in R:
 
 ``` r
+# read in initial IDs file for individuals
+western.ids <- read_table("./data/western/amre.western.wgsassign.ids.txt",
+                          col_names = c("sample", "source_pop"))
 western.ess.ind <- western.ids %>% 
   cbind(read_table("./out/western/amre.western.reference.ne_ind.txt",
                     col_names = "ess"))
@@ -202,14 +195,14 @@ western.ess.ind <- western.ids %>%
 head(western.ess.ind)
 ```
 
-| Sample | Breeding_pop |       ess |
-|:-------|:-------------|----------:|
-| Ind0   | WB           | 0.4986932 |
-| Ind1   | WB           | 0.5270658 |
-| Ind2   | WB           | 0.5778369 |
-| Ind3   | WB           | 0.5902037 |
-| Ind40  | BR           | 0.6239626 |
-| Ind41  | BR           | 0.6325736 |
+| sample | source_pop |       ess |
+|:-------|:-----------|----------:|
+| Ind0   | WB         | 0.4986932 |
+| Ind1   | WB         | 0.5270658 |
+| Ind2   | WB         | 0.5778369 |
+| Ind3   | WB         | 0.5902037 |
+| Ind40  | BR         | 0.6239626 |
+| Ind41  | BR         | 0.6325736 |
 
 Let’s see if there’s any variation in individual effective sample
 between the populations - this would occur if there’s differences in
@@ -218,7 +211,7 @@ sample age, etc.
 
 ``` r
 western.ess.ind.summary <- western.ess.ind %>%
-  group_by(Breeding_pop) %>%
+  group_by(source_pop) %>%
   summarize(N = n(),
             Mean_ess = mean(ess), # get mean effective sample size by group
             Max_ess = max(ess),
@@ -229,10 +222,10 @@ western.ess.ind.summary <- western.ess.ind %>%
 western.ess.ind.summary
 ```
 
-| Breeding_pop |   N |  Mean_ess |   Max_ess |   Min_ess |
-|:-------------|----:|----------:|----------:|----------:|
-| BR           |  27 | 0.6012270 | 0.6689199 | 0.4411542 |
-| WB           |  20 | 0.5175374 | 0.6234842 | 0.2247970 |
+| source_pop |   N |  Mean_ess |   Max_ess |   Min_ess |
+|:-----------|----:|----------:|----------:|----------:|
+| BR         |  27 | 0.6012270 | 0.6689199 | 0.4411542 |
+| WB         |  20 | 0.5175374 | 0.6234842 | 0.2247970 |
 
 The table above shows us that there are more individuals in the Basin
 Rockies group than Western Boreal (27 vs. 20), but also that Basin
@@ -249,7 +242,7 @@ can take our IDs file and subset it to that number of individuals:
 
 ``` r
 balanced.western.ids <- western.ids %>%
-  group_by(Breeding_pop) %>%
+  group_by(source_pop) %>%
   slice_head(n = 20) # cut to 20 individuals per group
 ```
 
@@ -380,6 +373,9 @@ accuracy looks like. I use the same R code as above, just pipe a little
 more of it together:
 
 ``` r
+western.ids <- read_table("./data/western/amre.western.wgsassign.ids.txt",
+                          col_names = c("sample", "source_pop"))
+western.pops <- readLines("./out/western/amre.western.reference.pop_names.txt")
 western.assign <- cbind(western.ids, read_table("./out/western/amre.western.assign.pop_like.txt",
                           col_names = western.pops))
 ```
@@ -388,26 +384,26 @@ western.assign <- cbind(western.ids, read_table("./out/western/amre.western.assi
 head(western.assign)
 ```
 
-| Sample | Breeding_pop |        BR |        WB |
-|:-------|:-------------|----------:|----------:|
-| Ind0   | WB           | -84764.77 | -79879.77 |
-| Ind1   | WB           | -82439.19 | -76798.41 |
-| Ind2   | WB           | -80902.37 | -75353.43 |
-| Ind3   | WB           | -79201.48 | -72923.70 |
-| Ind40  | BR           | -73404.52 | -79261.27 |
-| Ind41  | BR           | -74071.25 | -79557.99 |
+| sample | source_pop |        BR |        WB |
+|:-------|:-----------|----------:|----------:|
+| Ind0   | WB         | -84764.77 | -79879.77 |
+| Ind1   | WB         | -82439.19 | -76798.41 |
+| Ind2   | WB         | -80902.37 | -75353.43 |
+| Ind3   | WB         | -79201.48 | -72923.70 |
+| Ind40  | BR         | -73404.52 | -79261.27 |
+| Ind41  | BR         | -74071.25 | -79557.99 |
 
 ``` r
 western.assign.summary <- western.assign %>%
   pivot_longer(cols = BR:WB,
                names_to = "AssignedPop",
                values_to = "AssignedLike") %>%
-  group_by(Sample) %>%
+  group_by(sample) %>%
   mutate(AssignedProb = round(exp(AssignedLike - max(AssignedLike)) / sum(exp(AssignedLike - max(AssignedLike))),2 )) %>%
   filter(AssignedLike == max(AssignedLike)) %>%
   ungroup() %>%
-  mutate(Correct = ifelse(Breeding_pop == AssignedPop, 1, 0)) %>%
-  group_by(Breeding_pop) %>%
+  mutate(Correct = ifelse(source_pop == AssignedPop, 1, 0)) %>%
+  group_by(source_pop) %>%
   summarize(Accuracy = sum(Correct)/n(),
             .groups = "drop")
 ```
@@ -416,10 +412,10 @@ western.assign.summary <- western.assign %>%
 western.assign.summary
 ```
 
-| Breeding_pop | Accuracy |
-|:-------------|---------:|
-| BR           |        1 |
-| WB           |        1 |
+| source_pop | Accuracy |
+|:-----------|---------:|
+| BR         |        1 |
+| WB         |        1 |
 
 Wow, 100% accuracy for both pops! In contrast, we had much lower
 assignment accuracy before for the Western Boreal group. Clearly, we
@@ -480,15 +476,15 @@ is balanced
 ``` r
 library(tidyverse)
 western.ids <- read_table("./data/western/amre.western.wgsassign.ids.txt",
-                          col_names = c("Sample", "Breeding_pop"))
+                          col_names = c("sample", "source_pop"))
 full.meta <- read_csv("./data/full.amre.beagle.meta.csv")
 western.ess.ind <- western.ids %>% 
   cbind(read_table("./out/western/amre.western.reference.ne_ind.txt",
                     col_names = "ess"))
 
 western.ids.meta <- western.ids %>%
-  left_join(full.meta, by = c("Sample", "Breeding_pop")) %>%
-  left_join(western.ess.ind, by = c("Sample", "Breeding_pop"))
+  left_join(full.meta, by = c("sample", "source_pop")) %>%
+  left_join(western.ess.ind, by = c("sample", "source_pop"))
 
 western.ids.meta
 ```
@@ -499,13 +495,13 @@ that will split samples up evenly within sampling site
 ``` r
 set.seed(13984891)
 balanced.ref.pop.n <- western.ids.meta %>%
-  group_by(Breeding_pop) %>%
+  group_by(source_pop) %>%
   slice_sample(n = 20)
 ```
 
 ``` r
 balanced.ref.pop.n %>%
-  group_by(Breeding_pop) %>%
+  group_by(source_pop) %>%
   summarize(Sum_ess = sum(ess),
             N_samples = n())
 ```
@@ -516,10 +512,10 @@ individuals from that population
 
 ``` r
 balanced.ref.pop.n.ess <- balanced.ref.pop.n %>%
-  filter(!Sample %in% c("Ind305", "Ind296", "Ind307"))
+  filter(!sample %in% c("Ind305", "Ind296", "Ind307"))
 
 balanced.ref.pop.n.ess %>%
-  group_by(Breeding_pop) %>%
+  group_by(source_pop) %>%
   summarize(Sum_ess = sum(ess),
             N_samples = n())
 ```
@@ -529,7 +525,7 @@ of samples to be run in WGSassign.
 
 ``` r
 balanced.ref.pop.n.ess %>%
-  select(Sample, Breeding_pop) %>%
+  select(sample, source_pop) %>%
   write_delim("./out/activity1/reference.wgsassign.ids.txt", delim = "\t", col_names = FALSE)
 ```
 
@@ -596,7 +592,7 @@ the “Test” group. Create a new Beagle file for the “Test” group.
 
 ``` r
 test.wgsassign.ids <- western.ids %>%
-  filter(!Sample %in% pull(balanced.ref.pop.n.ess, Sample))
+  filter(!sample %in% pull(balanced.ref.pop.n.ess, sample))
 test.wgsassign.ids
 ```
 
